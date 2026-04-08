@@ -37,3 +37,6 @@ private-key.pem
 
 # Docker
 pgdata/
+
+# Local notes / command cheatsheets (optional)
+helpful-commands.md
