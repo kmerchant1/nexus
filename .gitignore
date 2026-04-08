@@ -31,3 +31,9 @@ pinecone_cache/
 dist/
 build/
 *.egg-info/
+
+# GitHub App private key (never commit this)
+private-key.pem
+
+# Docker
+pgdata/
