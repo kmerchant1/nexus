@@ -1,8 +1,13 @@
-"""ARQ worker settings. Placeholder until tasks are implemented in S1.5."""
+"""ARQ worker configuration."""
+
+import logging
 
 from arq.connections import RedisSettings
 
 from nexus.config import settings
+from nexus.worker.tasks import init_repo_task, process_pr_task
+
+logger = logging.getLogger("nexus.worker")
 
 
 def parse_redis_url(url: str) -> RedisSettings:
@@ -22,15 +27,15 @@ def parse_redis_url(url: str) -> RedisSettings:
 
 
 async def startup(ctx: dict):
-    pass
+    logger.info("Worker started")
 
 
 async def shutdown(ctx: dict):
-    pass
+    logger.info("Worker shutting down")
 
 
 class WorkerSettings:
-    functions: list = []
+    functions = [init_repo_task, process_pr_task]
     on_startup = startup
     on_shutdown = shutdown
     redis_settings = parse_redis_url(settings.redis_url)

@@ -5,6 +5,7 @@ from pathlib import Path
 from fastapi import FastAPI
 
 from nexus.api.health import router as health_router
+from nexus.api.webhooks import router as webhook_router
 from nexus.config import settings
 from nexus.database import engine
 from nexus.services.github_client import GitHubClient
@@ -46,3 +47,4 @@ app = FastAPI(
 )
 
 app.include_router(health_router)
+app.include_router(webhook_router)
