@@ -2,6 +2,7 @@ import logging
 from contextlib import asynccontextmanager
 from pathlib import Path
 
+from arq import create_pool
 from fastapi import FastAPI
 
 from nexus.api.health import router as health_router
@@ -9,6 +10,7 @@ from nexus.api.webhooks import router as webhook_router
 from nexus.config import settings
 from nexus.database import engine
 from nexus.services.github_client import GitHubClient
+from nexus.worker.settings import parse_redis_url
 
 logging.basicConfig(
     level=logging.INFO,
@@ -29,12 +31,17 @@ async def lifespan(app: FastAPI):
         app.state.github_client = None
         logger.warning("GitHub App credentials not configured -- client disabled")
 
+    app.state.arq_pool = await create_pool(parse_redis_url(settings.redis_url))
+    logger.info("ARQ Redis pool initialized")
+
     yield
 
     logger.info("Nexus shutting down...")
     if app.state.github_client:
         await app.state.github_client.close()
         logger.info("GitHub client closed")
+    await app.state.arq_pool.aclose()
+    logger.info("ARQ Redis pool closed")
     await engine.dispose()
     logger.info("Database engine closed")
 
