@@ -74,6 +74,7 @@ async def _handle_installation_created(
             repo.full_name = repo_payload.full_name
             repo.default_branch = repo_payload.default_branch
             repo.installation_id = installation.id
+            repo.status = "pending_init"
         else:
             repo = Repo(
                 installation_id=installation.id,
@@ -83,24 +84,23 @@ async def _handle_installation_created(
                 status="pending_init",
             )
             db.add(repo)
-            await db.flush()
+        await db.flush()
 
-            job = Job(
-                repo_id=repo.id,
-                job_type="init",
-                trigger_ref="installation",
-                status="queued",
-            )
-            db.add(job)
-            await db.flush()
-            await arq_pool.enqueue_job(
-                "init_repo_task",
-                job_id=str(job.id),
-                repo_id=str(repo.id),
-            )
-            logger.info("Enqueued init_repo job %s for repo %s", job.id, repo.full_name)
-            jobs_created += 1
-
+        job = Job(
+            repo_id=repo.id,
+            job_type="init",
+            trigger_ref="installation",
+            status="queued",
+        )
+        db.add(job)
+        await db.flush()
+        await arq_pool.enqueue_job(
+            "init_repo_task",
+            job_id=str(job.id),
+            repo_id=str(repo.id),
+        )
+        logger.info("Enqueued init_repo job %s for repo %s", job.id, repo.full_name)
+        jobs_created += 1
         repos_created += 1
 
     await db.commit()
