@@ -1,0 +1,41 @@
+---
+description: Nexus product context, tech stack, and current sprint status
+alwaysApply: true
+---
+
+# Nexus: Project Context
+
+Nexus is a GitHub App that compiles a human-authored `.nexus/raw/` folder into a structured wiki + knowledge graph stored in Postgres, then renders it via a web dashboard. Design philosophy: humans curate raw context, the LLM compiles / maintains / renders it.
+
+## Canonical spec
+
+The authoritative spec is `.cursor/plans/nexus_mvp_scaffold_26ea47b0.plan.md`. **Read it before making any non-trivial change.** Do not re-derive architecture from scratch — the plan already answers most design questions.
+
+## Tech stack
+
+- Python 3.12, FastAPI, Pydantic v2
+- SQLAlchemy 2.0 async + asyncpg + Alembic (Postgres)
+- ARQ + Redis for background jobs
+- Anthropic SDK for Claude calls (structured output via `tool_use`)
+- httpx for GitHub REST API
+- Docker Compose: `app`, `worker`, `postgres`, `redis`
+
+## Sprint status
+
+- **Sprint 1 (Foundation)** — complete. Docker stack, DB models (`Installation`, `Repo`, `Job`), GitHub App auth, webhook handler, ARQ worker with placeholder tasks.
+- **Sprint 2 (Init pipeline)** — in progress. Raw ingester, DB schema for wiki + graph, compile pipeline, Context Guard.
+- **Sprint 3 (PR update pipeline)** — queued. Dual-trigger (code diff / raw edit) with DB-only updates.
+- **Sprint 4 (Frontend)** — queued. Next.js dashboard reading from a read-only FastAPI surface.
+
+## Key design invariants
+
+1. **DB-only output.** Nexus never writes back to the user's repo. No Shadow PRs in v1.
+2. **Obsidian round-trip.** `wiki_pages` must project losslessly to an Obsidian vault (YAML frontmatter, `[[slug]]` links, `relation:: [[target-slug]]` Dataview lines mirroring every `knowledge_edges` row). See the `wiki-invariants` rule.
+3. **Raw sources are the only human input.** Users edit `.nexus/raw/**`; everything else is compiled.
+
+## Local dev cheat-sheet
+
+- `docker compose up --build` — boot the stack.
+- `docker compose exec app alembic upgrade head` — run migrations.
+- `curl localhost:8000/health` — smoke test.
+- GitHub webhooks forwarded via `npx smee -u <channel> -t http://localhost:8000/webhooks/github`.

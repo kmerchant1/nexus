@@ -1,0 +1,54 @@
+---
+description: Obsidian round-trip invariant for all compiled wiki + graph output
+globs: nexus/wiki/**/*.py, nexus/core/scribe.py, nexus/core/raw_ingester.py, nexus/prompts/**, nexus/pipelines/**/*.py
+alwaysApply: false
+---
+
+# Wiki / Graph Compilation Invariants
+
+Every `wiki_pages` row must be a **lossless projection of an Obsidian vault file**. An exporter should be able to walk `wiki_pages` and emit one `.md` per row that opens cleanly in Obsidian with typed edges visible via the Dataview plugin.
+
+The Context Guard (`nexus/wiki/linter.py`) enforces these rules. Prompts under `nexus/prompts/` must instruct Claude to comply on every page it emits.
+
+## The three rules
+
+1. **YAML-parseable frontmatter** on every page. Required fields: `title`, `node_type`, `file_paths`, `related`, `sources`, `confidence`.
+2. **Cross-page references use `[[slug]]`.** Never raw URLs, never bare titles, never ad-hoc markdown links to other wiki pages.
+3. **Every `knowledge_edges` row has a matching body line** on its source page, using Dataview syntax:
+
+   ```
+   relation_name:: [[target-slug]]
+   ```
+
+   If the DB has an edge without a matching body line, the page fails lint (and vice versa).
+
+## Correct example
+
+```markdown
+---
+title: Authentication
+node_type: module
+file_paths: [src/auth/]
+related: [[authorization]], [[jwt_tokens]]
+sources: [.nexus/raw/overview.md, .nexus/raw/decisions/2026-04-jwt.md]
+confidence: high
+---
+
+Authentication is handled via short-lived JWTs; see [[jwt_tokens]] for the token lifecycle.
+
+## Relations
+
+- depends_on:: [[postgres]]
+- uses:: [[jwt_tokens]]
+- related_to:: [[authorization]]
+```
+
+Each `relation::` line maps 1:1 to a `knowledge_edges` row with matching `source_node`, `target_node`, and `relation`.
+
+## Wrong (lint fails)
+
+- Body says `See [JWT docs](https://example.com/jwt)` → fails rule 2. Use `[[jwt_tokens]]`.
+- `knowledge_edges` has `(auth, depends_on, postgres)` but the `authentication.md` body has no `depends_on:: [[postgres]]` → fails rule 3.
+- Frontmatter with tabs, missing `title`, or invalid YAML → fails rule 1.
+
+See Part 4 ("Obsidian round-trip invariant") of the plan for full rationale.

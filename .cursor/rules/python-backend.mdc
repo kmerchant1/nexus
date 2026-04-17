@@ -1,0 +1,56 @@
+---
+description: Python, async, and SQLAlchemy conventions for the Nexus backend
+globs: nexus/**/*.py
+alwaysApply: false
+---
+
+# Nexus Backend Conventions
+
+## Async DB sessions
+
+Two session entry points, defined in `nexus/database.py` — **never mix them**:
+
+- `get_session()` → FastAPI dependency. Use in route handlers via `Depends(get_db)` from `nexus/api/dependencies.py`.
+- `get_session_context()` → standalone async context manager. Use in ARQ tasks and any non-request context.
+
+```python
+# In an ARQ task (nexus/worker/tasks.py):
+async with get_session_context() as session:
+    job = await session.get(Job, job_id)
+    ...
+    await session.commit()
+```
+
+## SQLAlchemy 2.0 style
+
+Models inherit from `Base` in `nexus/database.py`, which already provides `id: UUID` (PK, `default=uuid.uuid4`) and `created_at`. **Do not re-declare them.**
+
+```python
+class RawSource(Base):
+    __tablename__ = "raw_sources"
+    repo_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("repos.id", ondelete="CASCADE"))
+    path: Mapped[str] = mapped_column(String(512))
+    content: Mapped[str] = mapped_column(Text)
+    content_hash: Mapped[str] = mapped_column(String(64))
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+    __table_args__ = (UniqueConstraint("repo_id", "path"),)
+```
+
+## Pydantic v2
+
+Use `BaseModel` for API payloads and LLM structured outputs. For GitHub webhook models that need snake_case ↔ camelCase aliasing, set `model_config = ConfigDict(populate_by_name=True)` (see `nexus/models/events.py`).
+
+## Alembic
+
+- After adding/changing a model: `docker compose exec app alembic revision --autogenerate -m "msg"`.
+- **Hand-review the generated migration** before committing — autogenerate sometimes misses indexes, server defaults, or enum changes.
+- Apply with `docker compose exec app alembic upgrade head`.
+
+## Async rules
+
+- No blocking calls in async code. Wrap sync libs with `asyncio.to_thread`.
+- Never use `requests` — always `httpx.AsyncClient`.
+- Bound concurrency with `asyncio.Semaphore` when fanning out to GitHub or Anthropic.
+- Ruff is configured in `pyproject.toml` (line length 100, `py312` target). Keep imports sorted (`I` rule).

@@ -1,0 +1,39 @@
+---
+description: Testing conventions for Nexus (pytest-asyncio, mocked integrations)
+globs: tests/**/*.py
+alwaysApply: false
+---
+
+# Nexus Testing Conventions
+
+## Framework
+
+- `pytest` + `pytest-asyncio`, with `asyncio_mode = "auto"` (configured in `pyproject.toml`). Do not decorate tests with `@pytest.mark.asyncio` — it's implicit.
+- Tests live under `tests/` and mirror the package layout (e.g. `tests/core/test_raw_ingester.py`, `tests/wiki/test_linter.py`).
+
+## External integrations — always mocked
+
+Tests must never hit the real Anthropic API or GitHub API. Use `unittest.mock` / `pytest-mock` or fixture files under `tests/fixtures/`.
+
+- `LLMClient.complete_structured` → mock at the method level, return a fake Pydantic instance of the expected response schema.
+- `GitHubClient` methods → mock with recorded JSON payloads (e.g. `tests/fixtures/github/installation_created.json`).
+- Webhook signature verification → either mock the verifier or compute a valid signature inside the test (prefer the latter for realism).
+
+## DB fixtures
+
+- Apply Alembic migrations once per test run against a dedicated test database (never the dev DB).
+- Per-test async session that rolls back on teardown:
+
+```python
+@pytest_asyncio.fixture
+async def session():
+    async with async_session_factory() as s:
+        yield s
+        await s.rollback()
+```
+
+## Conventions
+
+- Prefer many small focused tests over one giant integration test. Exception: end-to-end pipeline tests in `tests/pipelines/` may span multiple stages.
+- Assert exact shapes, not just truthy/falsy (e.g. `assert result.pages[0].slug == "authentication"`).
+- Use factory helpers / fixtures for common objects (`RawCorpus`, `ChangeSet`, `CompiledKnowledgeBase`) so tests stay readable.
